@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The notification icon is looked up by name from Dart, so release resource
+     shrinking must not remove it. The file name must be unique: a library ships
+     res/raw/keep.xml (keeping default_web_client_id for Google Sign-In), and an
+     app file with the same name would replace it and break sign-in. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_notification" />

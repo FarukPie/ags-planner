@@ -25,10 +25,12 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await context.read<AuthService>().signIn();
     } on GoogleSignInException catch (e) {
+      debugPrint('Google sign-in failed: ${e.code} ${e.description} ${e.details}');
       if (e.code != GoogleSignInExceptionCode.canceled) {
         _error = 'Giriş yapılamadı. İnternet bağlantını kontrol edip tekrar dene.';
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Sign-in failed: $e');
       _error = 'Giriş yapılamadı. İnternet bağlantını kontrol edip tekrar dene.';
     } finally {
       if (mounted) setState(() => _busy = false);
