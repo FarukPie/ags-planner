@@ -716,6 +716,17 @@ void main() {
       await tester.tap(find.text('Geri al'));
       await tester.pumpAndSettle();
       expect(p.notes.single.status, NoteStatus.active);
+
+      // Trashing shows an undo snack bar that goes away on its own.
+      await tester.tap(find.text('Lozan maddeleri'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Çöp kutusuna taşı'));
+      await tester.pumpAndSettle();
+      expect(p.notes.single.status, NoteStatus.trashed);
+      expect(find.text('Not çöp kutusuna taşındı'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(find.text('Not çöp kutusuna taşındı'), findsNothing);
     });
   });
 }

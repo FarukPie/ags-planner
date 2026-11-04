@@ -259,6 +259,10 @@ void showNoteExitSnack(BuildContext context, NoteEditorResult r) {
     ..showSnackBar(
       SnackBar(
         content: Text(text),
+        // Snack bars with an action stay until tapped by default; the undo
+        // offer should disappear on its own after a few seconds.
+        persist: false,
+        duration: const Duration(seconds: 4),
         action: r.exit == NoteEditorExit.discarded
             ? null
             : SnackBarAction(label: 'Geri al', onPressed: () => app.setNoteStatus(r.id, r.from)),
