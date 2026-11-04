@@ -36,6 +36,29 @@ class NotificationService {
     }
   }
 
+  /// Whether the end alarm may wake the screen. Android 14+ can deny
+  /// full-screen intents; the alarm then only rings and vibrates.
+  Future<bool> canWakeScreen() async {
+    if (!_ready || defaultTargetPlatform != TargetPlatform.android) return true;
+    try {
+      return await _lockChannel.invokeMethod<bool>('canUseFullScreenIntent') ?? true;
+    } catch (e) {
+      debugPrint('Full-screen intent check failed: $e');
+      return true;
+    }
+  }
+
+  /// Opens the system page where the user allows full-screen alarms.
+  Future<void> requestWakeScreen() async {
+    try {
+      await _plugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestFullScreenIntentPermission();
+    } catch (e) {
+      debugPrint('Full-screen intent request failed: $e');
+    }
+  }
+
   Future<void> _initLockAlarm() async {
     if (defaultTargetPlatform != TargetPlatform.android) return;
     void apply(Object? payload) {
@@ -144,6 +167,9 @@ class NotificationService {
 
   Future<void> schedulePomodoroEnd(Duration after, {required bool isRest}) async {
     if (!_ready) return;
+    // Clear the previous "time's up" alert, so this phase's end is posted as a
+    // new notification (an update of an old one wouldn't wake the screen).
+    await _cancel(_pomodoroId);
     // Exact timing matters for a timer; fall back to inexact if not allowed.
     var exact = true;
     try {

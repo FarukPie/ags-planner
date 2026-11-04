@@ -1,6 +1,7 @@
 package com.agsplanner.ags_planner
 
 import android.app.KeyguardManager
+import android.app.NotificationManager
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -33,6 +34,11 @@ class MainActivity : FlutterActivity() {
                         setOverLock(false)
                         result.success(null)
                     }
+                    // Android 14+ may deny full-screen intents; then the alarm can't wake the screen.
+                    "canUseFullScreenIntent" -> result.success(
+                        Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE ||
+                            getSystemService(NotificationManager::class.java)?.canUseFullScreenIntent() != false
+                    )
                     else -> result.notImplemented()
                 }
             }

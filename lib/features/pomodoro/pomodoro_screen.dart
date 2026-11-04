@@ -25,7 +25,7 @@ class PomodoroScreen extends StatefulWidget {
   State<PomodoroScreen> createState() => _PomodoroScreenState();
 }
 
-class _PomodoroScreenState extends State<PomodoroScreen> {
+class _PomodoroScreenState extends State<PomodoroScreen> with WidgetsBindingObserver {
   final _timer = StudyTimerController();
 
   String? _lessonName;
@@ -36,12 +36,28 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
 
   NotificationService? _notifications;
 
+  /// False when Android won't let the end alarm wake the screen.
+  bool _canWakeScreen = true;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _notifications = context.read<AppProvider>().notifications;
     _timer.onPhaseFinished = _onPhaseFinished;
     _timer.addListener(_syncNotification);
+    _checkWakeScreen();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Re-check when the user comes back from the system settings page.
+    if (state == AppLifecycleState.resumed) _checkWakeScreen();
+  }
+
+  Future<void> _checkWakeScreen() async {
+    final ok = await _notifications?.canWakeScreen() ?? true;
+    if (mounted && ok != _canWakeScreen) setState(() => _canWakeScreen = ok);
   }
 
   /// Mirrors the timer to the system: a live countdown in the status bar and
@@ -79,6 +95,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _notifications?.cancelTimer();
     _timer.dispose();
     super.dispose();
@@ -178,6 +195,11 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                 onSelectionChanged: locked ? null : (s) => _timer.setMode(s.first),
               ),
             ),
+            if (!_canWakeScreen && _timer.mode == StudyMode.pomodoro)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: _WakeScreenBanner(onAllow: () => _notifications?.requestWakeScreen()),
+              ),
             const SizedBox(height: 24),
             _TimerDial(timer: _timer, subject: _lessonName == null ? null : _subject),
             const SizedBox(height: 24),
@@ -270,6 +292,38 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// Explains why the screen stays dark at the end and opens the right setting.
+class _WakeScreenBanner extends StatelessWidget {
+  const _WakeScreenBanner({required this.onAllow});
+
+  final VoidCallback onAllow;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.tertiaryContainer,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+        child: Row(
+          children: [
+            Icon(Icons.screen_lock_portrait_rounded, color: scheme.onTertiaryContainer),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Süre dolduğunda ekranın açılması için tam ekran bildirim izni gerekli.',
+                style: TextStyle(color: scheme.onTertiaryContainer),
+              ),
+            ),
+            TextButton(onPressed: onAllow, child: const Text('İzin ver')),
+          ],
+        ),
       ),
     );
   }
