@@ -10,6 +10,7 @@ import 'core/app_theme.dart';
 import 'core/local_storage.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/calendar_service.dart';
+import 'core/services/legacy_note_photos.dart';
 import 'core/services/notification_service.dart';
 import 'features/onboarding/auth_gate.dart';
 import 'features/pomodoro/lock_alarm_screen.dart';
@@ -32,6 +33,8 @@ Future<void> main() async {
 
   final notifications = NotificationService();
   await notifications.init();
+  // Not awaited: one-time cleanup of photos from the removed note-photo feature.
+  LegacyNotePhotos.deleteAll();
 
   final auth = AuthService(firebaseReady: firebaseReady);
   await auth.init();

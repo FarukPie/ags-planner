@@ -30,7 +30,6 @@ class NoteModel {
   /// When true the note is a to-do list ([checklist]) instead of [content].
   final bool isChecklist;
   final List<ChecklistItem> checklist;
-  final List<String> imagePaths;
 
   /// Index into the note palette; 0 = the theme's card color.
   final int colorIndex;
@@ -53,7 +52,6 @@ class NoteModel {
     this.content = '',
     this.isChecklist = false,
     this.checklist = const [],
-    this.imagePaths = const [],
     this.colorIndex = 0,
     this.isPinned = false,
     this.status = NoteStatus.active,
@@ -71,8 +69,7 @@ class NoteModel {
   /// True when there is nothing worth keeping.
   bool get isEmpty =>
       title.trim().isEmpty &&
-      (isChecklist ? checklist.every((i) => i.text.trim().isEmpty) : content.trim().isEmpty) &&
-      imagePaths.isEmpty;
+      (isChecklist ? checklist.every((i) => i.text.trim().isEmpty) : content.trim().isEmpty);
 
   /// Everything searchable, lower-cased.
   String get searchText => [
@@ -87,7 +84,6 @@ class NoteModel {
     String? content,
     bool? isChecklist,
     List<ChecklistItem>? checklist,
-    List<String>? imagePaths,
     int? colorIndex,
     bool? isPinned,
     NoteStatus? status,
@@ -105,7 +101,6 @@ class NoteModel {
         content: content ?? this.content,
         isChecklist: isChecklist ?? this.isChecklist,
         checklist: checklist ?? this.checklist,
-        imagePaths: imagePaths ?? this.imagePaths,
         colorIndex: colorIndex ?? this.colorIndex,
         isPinned: isPinned ?? this.isPinned,
         status: status ?? this.status,
@@ -123,7 +118,6 @@ class NoteModel {
         'content': content,
         'isChecklist': isChecklist,
         'checklist': [for (final i in checklist) i.toMap()],
-        'imagePaths': imagePaths,
         'colorIndex': colorIndex,
         'isPinned': isPinned,
         'status': status.name,
@@ -135,10 +129,9 @@ class NoteModel {
         'updatedAt': dateToString(updatedAt),
       };
 
-  /// Also reads notes from older versions (lesson required, a single
-  /// `localImagePath`, `isCritical` instead of pinning).
+  /// Also reads notes from older versions (lesson required, `isCritical`
+  /// instead of pinning). Photo fields of older versions are ignored.
   factory NoteModel.fromMap(Map<String, dynamic> map) {
-    final legacyImage = map['localImagePath'] as String?;
     return NoteModel(
       id: map['id'] as String,
       title: map['title'] as String? ?? '',
@@ -148,9 +141,6 @@ class NoteModel {
         for (final i in (map['checklist'] as List? ?? const []))
           ChecklistItem.fromMap(Map<String, dynamic>.from(i as Map)),
       ],
-      imagePaths: map['imagePaths'] is List
-          ? List<String>.from(map['imagePaths'] as List)
-          : [?legacyImage],
       colorIndex: (map['colorIndex'] as num?)?.toInt() ?? 0,
       isPinned: map['isPinned'] as bool? ?? map['isCritical'] as bool? ?? false,
       status: NoteStatus.values.firstWhere(

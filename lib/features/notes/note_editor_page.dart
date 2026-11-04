@@ -1,12 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/lesson_style.dart';
-import '../../core/services/image_store.dart';
 import '../../models/note_model.dart';
 import '../../models/topic_model.dart';
 import '../../providers/app_provider.dart';
@@ -20,7 +16,7 @@ enum NoteEditorExit { archived, unarchived, trashed, discarded }
 typedef NoteEditorResult = ({NoteEditorExit exit, String id, NoteStatus from});
 
 /// How a new note starts.
-enum NoteStart { text, checklist, camera, gallery }
+enum NoteStart { text, checklist }
 
 /// Opens the editor for [note] (or a new note); null when it was simply closed.
 Future<NoteEditorResult?> openNoteEditor(BuildContext context, {NoteModel? note, NoteStart start = NoteStart.text}) =>
@@ -68,7 +64,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   late final List<_Item> _items = [
     for (final i in widget.note?.checklist ?? const <ChecklistItem>[]) _Item(i.id, i.text, i.done),
   ];
-  late final List<String> _images = List.of(widget.note?.imagePaths ?? const <String>[]);
   late int _color = widget.note?.colorIndex ?? 0;
   late bool _pinned = widget.note?.isPinned ?? false;
   late String? _lesson = widget.note?.lessonName;
@@ -79,9 +74,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   late bool _stored = widget.note != null;
   bool _dirty = false;
   bool _showDone = true;
-
-  /// Photos picked here; deleted if the note ends up discarded.
-  final Set<String> _picked = {};
 
   NoteStatus get _status => _app.noteById(_id)?.status ?? widget.note?.status ?? NoteStatus.active;
 
@@ -102,10 +94,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             _contentFocus.requestFocus();
           case NoteStart.checklist:
             _addItem();
-          case NoteStart.camera:
-            _pickImage(ImageSource.camera);
-          case NoteStart.gallery:
-            _pickImage(ImageSource.gallery);
         }
       });
     }
@@ -146,7 +134,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           for (final i in _items)
             if (i.controller.text.trim().isNotEmpty) ChecklistItem(id: i.id, text: i.controller.text.trim(), done: i.done),
         ],
-        imagePaths: List.of(_images),
         colorIndex: _color,
         isPinned: _pinned,
         status: _status,
@@ -166,11 +153,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     _updatedAt = note.updatedAt;
     _dirty = false;
     _stored = true;
-    // Picked photos are now owned by the saved note; ones removed again are dropped.
-    for (final p in _picked.where((p) => !_images.contains(p)).toList()) {
-      await ImageStore.delete(p);
-    }
-    _picked.clear();
     await _app.saveNote(note);
     return true;
   }
@@ -178,9 +160,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Future<void> _close() async {
     NoteEditorResult? result;
     if (!await _save()) {
-      for (final p in _picked) {
-        await ImageStore.delete(p);
-      }
       if (_stored) {
         // An existing note that was emptied is removed.
         await _app.deleteNoteForever(_id);
@@ -239,45 +218,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         _checklist = !_checklist;
       });
 
-  // ------------------------------------------------------------ photos, color, tag
-
-  Future<void> _pickImage(ImageSource source) async {
-    try {
-      final path = await ImageStore.pick(source);
-      if (path == null) return;
-      _picked.add(path);
-      _change(() => _images.add(path));
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fotoğraf eklenemedi: $e')));
-      }
-    }
-  }
-
-  Future<void> _photoSheet() async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      showDragHandle: true,
-      builder: (c) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Fotoğraf çek'),
-              onTap: () => Navigator.pop(c, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Galeriden seç'),
-              onTap: () => Navigator.pop(c, ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (source != null) await _pickImage(source);
-  }
+  // ------------------------------------------------------------ color, tag
 
   Future<void> _colorSheet() async {
     await showModalBottomSheet<void>(
@@ -350,11 +291,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     }
   }
 
-  void _viewImages(int index) => Navigator.push(
-        context,
-        MaterialPageRoute<void>(builder: (_) => _ImageViewer(paths: _images, initial: index)),
-      );
-
   // ------------------------------------------------------------ build
 
   @override
@@ -410,14 +346,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           body: ListView(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
             children: [
-              if (_images.isNotEmpty) ...[
-                _ImageStrip(
-                  paths: _images,
-                  onOpen: _viewImages,
-                  onRemove: (p) => _change(() => _images.remove(p)),
-                ),
-                const SizedBox(height: 14),
-              ],
               TextField(
                 controller: _title,
                 focusNode: _titleFocus,
@@ -500,9 +428,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           ),
           bottomNavigationBar: _BottomTools(
             checklist: _checklist,
-            canPhoto: ImageStore.isSupported,
             updatedAt: _stored ? _updatedAt : null,
-            onPhoto: _photoSheet,
             onChecklist: _toggleChecklist,
             onColor: _colorSheet,
             onLesson: _lessonSheet,
@@ -552,18 +478,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 class _BottomTools extends StatelessWidget {
   const _BottomTools({
     required this.checklist,
-    required this.canPhoto,
     required this.updatedAt,
-    required this.onPhoto,
     required this.onChecklist,
     required this.onColor,
     required this.onLesson,
   });
 
   final bool checklist;
-  final bool canPhoto;
   final DateTime? updatedAt;
-  final VoidCallback onPhoto;
   final VoidCallback onChecklist;
   final VoidCallback onColor;
   final VoidCallback onLesson;
@@ -586,8 +508,6 @@ class _BottomTools extends StatelessWidget {
           child: Row(
             children: [
               const SizedBox(width: 6),
-              if (canPhoto)
-                IconButton(tooltip: 'Fotoğraf ekle', icon: const Icon(Icons.add_photo_alternate_outlined), onPressed: onPhoto),
               IconButton(
                 tooltip: checklist ? 'Düz metne çevir' : 'Yapılacaklar listesi',
                 icon: Icon(checklist ? Icons.notes_rounded : Icons.checklist_rounded),
@@ -602,82 +522,6 @@ class _BottomTools extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ImageStrip extends StatelessWidget {
-  const _ImageStrip({required this.paths, required this.onOpen, required this.onRemove});
-
-  final List<String> paths;
-  final ValueChanged<int> onOpen;
-  final ValueChanged<String> onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget tile(int i, {double? height}) => ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Stack(
-            children: [
-              GestureDetector(
-                onTap: () => onOpen(i),
-                child: Image.file(
-                  File(paths[i]),
-                  height: height,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  cacheWidth: 1200,
-                  errorBuilder: (_, _, _) => Container(
-                    height: height ?? 160,
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    child: const Center(child: Text('Fotoğraf bulunamadı')),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 6,
-                right: 6,
-                child: IconButton.filledTonal(
-                  tooltip: 'Fotoğrafı kaldır',
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.close_rounded, size: 18),
-                  onPressed: () => onRemove(paths[i]),
-                ),
-              ),
-            ],
-          ),
-        );
-
-    if (paths.length == 1) return tile(0, height: 240);
-    return GridView.count(
-      crossAxisCount: paths.length == 2 ? 2 : 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 6,
-      crossAxisSpacing: 6,
-      children: [for (var i = 0; i < paths.length; i++) tile(i)],
-    );
-  }
-}
-
-class _ImageViewer extends StatelessWidget {
-  const _ImageViewer({required this.paths, required this.initial});
-
-  final List<String> paths;
-  final int initial;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
-      body: PageView(
-        controller: PageController(initialPage: initial),
-        children: [
-          for (final p in paths)
-            InteractiveViewer(maxScale: 5, child: Center(child: Image.file(File(p)))),
-        ],
       ),
     );
   }

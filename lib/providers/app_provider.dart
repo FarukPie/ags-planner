@@ -8,7 +8,6 @@ import '../core/app_constants.dart';
 import '../core/local_storage.dart';
 import '../core/services/calendar_service.dart';
 import '../core/services/cloud_sync_service.dart';
-import '../core/services/image_store.dart';
 import '../core/services/notification_service.dart';
 import '../models/agenda_model.dart';
 import '../models/exam_model.dart';
@@ -503,15 +502,11 @@ class AppProvider extends ChangeNotifier {
   double get topNoteSortKey =>
       _notes.isEmpty ? 0 : _notes.map((n) => n.sortKey).reduce((a, b) => a < b ? a : b) - 1;
 
-  /// Saves (creates or updates) a note; photos it no longer uses are deleted.
+  /// Saves (creates or updates) a note.
   Future<void> saveNote(NoteModel note) async {
-    final old = noteById(note.id);
     _upsert(_notes, note, (n) => n.id);
     notifyListeners();
     await _commit(StorageKeys.notes, upsert: note.toMap());
-    for (final path in old?.imagePaths ?? const <String>[]) {
-      if (!note.imagePaths.contains(path)) await ImageStore.delete(path);
-    }
   }
 
   /// Moves a note to the main list, the archive or the trash.
@@ -564,9 +559,6 @@ class AppProvider extends ChangeNotifier {
     _notes.remove(note);
     notifyListeners();
     await _commit(StorageKeys.notes, deleteId: id);
-    for (final path in note.imagePaths) {
-      await ImageStore.delete(path);
-    }
   }
 
   Future<void> emptyTrash() async {

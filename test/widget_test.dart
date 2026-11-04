@@ -197,9 +197,11 @@ void main() {
     test('older notes are read with their photo, lesson and critical flag', () {
       final n = NoteModel.fromMap({
         'id': 'old', 'lessonName': 'Tarih', 'title': 'Lozan', 'content': 'madde',
-        'localImagePath': '/x.jpg', 'isCritical': true, 'createdAt': '2026-01-01T10:00:00.000',
+        'localImagePath': '/x.jpg', 'imagePaths': ['/y.jpg'], 'isCritical': true,
+        'createdAt': '2026-01-01T10:00:00.000',
       });
-      expect(n.imagePaths, ['/x.jpg']);
+      // Photo fields of older versions are dropped (notes no longer have photos).
+      expect(n.toMap().keys, isNot(anyOf(contains('localImagePath'), contains('imagePaths'))));
       expect(n.isPinned, isTrue);
       expect(n.lessonName, 'Tarih');
       expect(n.status, NoteStatus.active);
@@ -688,7 +690,8 @@ void main() {
       expect(find.text('Lozan maddeleri'), findsOneWidget);
 
       // An empty new note is dropped.
-      await tester.tap(find.text('Yeni not'));
+      expect(find.text('Yeni not'), findsNothing); // single entry point now
+      await tester.tap(find.text('Bir not al…'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Geri'));
       await tester.pumpAndSettle();

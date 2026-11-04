@@ -1,12 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/lesson_style.dart';
-import '../../core/services/image_store.dart';
 import '../../core/widgets/animations.dart';
 import '../../models/note_model.dart';
 import 'note_palette.dart';
@@ -122,13 +119,13 @@ class NoteBoard extends StatelessWidget {
   }
 }
 
-/// One note preview: photo, title, text or checklist, lesson tag.
+/// One note preview: title, text or checklist, lesson tag.
 class NoteCard extends StatelessWidget {
   const NoteCard({super.key, required this.note, this.compact = false, this.onTap, this.lifted = false});
 
   final NoteModel note;
 
-  /// List layout: shorter preview, photo as a thumbnail on the side.
+  /// List layout: shorter preview.
   final bool compact;
   final VoidCallback? onTap;
   final bool lifted;
@@ -140,7 +137,6 @@ class NoteCard extends StatelessWidget {
     final bg = NotePalette.background(context, note.colorIndex) ?? theme.cardTheme.color ?? scheme.surface;
     final dark = theme.brightness == Brightness.dark;
     final n = note;
-    final images = ImageStore.isSupported ? n.imagePaths : const <String>[];
 
     final body = <Widget>[
       if (n.title.trim().isNotEmpty)
@@ -172,7 +168,7 @@ class NoteCard extends StatelessWidget {
             style: theme.textTheme.bodyMedium?.copyWith(height: 1.35, color: scheme.onSurface.withValues(alpha: 0.8)),
           ),
         ),
-      if (n.lessonName != null || (compact && images.isNotEmpty) || n.status != NoteStatus.active)
+      if (n.lessonName != null || n.status != NoteStatus.active)
         Padding(
           padding: const EdgeInsets.only(top: 10),
           child: Wrap(
@@ -191,31 +187,6 @@ class NoteCard extends StatelessWidget {
         ),
     ];
 
-    final photo = images.isEmpty
-        ? null
-        : _Photo(path: images.first, extra: images.length - 1, height: compact ? 72 : 130, width: compact ? 72 : null);
-
-    final content = compact
-        ? Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: body)),
-              if (photo != null) ...[const SizedBox(width: 12), photo],
-            ],
-          )
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Grid cards show the photo edge to edge (8px frame), text inset below.
-              ?photo,
-              if (body.isNotEmpty)
-                Padding(
-                  padding: photo == null ? EdgeInsets.zero : const EdgeInsets.fromLTRB(6, 10, 6, 6),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: body),
-                ),
-            ],
-          );
-
     return Material(
       color: bg,
       elevation: lifted ? 10 : 0,
@@ -226,7 +197,7 @@ class NoteCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.radius),
         child: Container(
           width: double.infinity,
-          padding: EdgeInsets.all(photo != null && !compact ? 8 : 14),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppTheme.radius),
             border: n.colorIndex == 0
@@ -236,7 +207,7 @@ class NoteCard extends StatelessWidget {
                 ? null
                 : [BoxShadow(color: const Color(0xFF6C4CF1).withValues(alpha: 0.06), blurRadius: 14, offset: const Offset(0, 4))],
           ),
-          child: content,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: body),
         ),
       ),
     );
@@ -318,49 +289,6 @@ class LessonTag extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _Photo extends StatelessWidget {
-  const _Photo({required this.path, required this.extra, required this.height, this.width});
-
-  final String path;
-  final int extra;
-  final double height;
-  final double? width;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppTheme.radius - 6),
-      child: Stack(
-        children: [
-          Image.file(
-            File(path),
-            height: height,
-            width: width ?? double.infinity,
-            fit: BoxFit.cover,
-            cacheWidth: 600,
-            errorBuilder: (_, _, _) => Container(
-              height: height,
-              width: width ?? double.infinity,
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: const Icon(Icons.broken_image_outlined),
-            ),
-          ),
-          if (extra > 0)
-            Positioned(
-              right: 6,
-              bottom: 6,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
-                child: Text('+$extra', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
-              ),
-            ),
-        ],
       ),
     );
   }

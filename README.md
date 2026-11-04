@@ -18,7 +18,7 @@ tekrar sistemi, deneme analizi, ajanda ve renkli notlar tek uygulamada.
   - Biten konu için 7. ve 30. gün tekrarları otomatik planlanır.
 - **Denemeler:** Resmî cevap kâğıdı düzeninde giriş, net gelişim grafiği, ders bazlı performans, zayıf konular.
 - **Notlar:**
-  - Otomatik kayıt, renkler, sabitleme, yapılacaklar listesi, çoklu fotoğraf.
+  - Otomatik kayıt, renkler, sabitleme, yapılacaklar listesi.
   - İsteğe bağlı ders etiketi.
   - Arşiv ve 30 günlük çöp kutusu; sürükle-bırak ile sıralama, ızgara / liste görünümü.
 - **Ajanda:** Takvim üzerinde planlar; istenirse Google Takvim'e gönderilir.
@@ -53,10 +53,12 @@ Firebase yapılandırma dosyaları depoda **yer almaz**. Uygulamayı çalıştı
    ```
 4. Android'de Google girişi için imza anahtarınızın SHA-1 / SHA-256 parmak izlerini Firebase'deki Android
    uygulamasına ekleyin (`cd android && ./gradlew signingReport`).
-5. Güvenlik kurallarını yayınlayın. Kurallara göre her kullanıcı yalnızca `users/{uid}` altındaki kendi verisine
-   erişebilir:
+5. Güvenlik kurallarını ve indeks ayarını yayınlayın. Kurallara göre her kullanıcı yalnızca `users/{uid}` altındaki
+   kendi verisine erişebilir. `firestore.indexes.json` not alanlarını otomatik indekslemeden çıkarır (uygulama notlarda
+   sunucu sorgusu yapmaz), bu da depolamayı azaltır. `firebase.json` içinde `"indexes": "firestore.indexes.json"`
+   satırı olmalı:
    ```
-   firebase deploy --only firestore:rules
+   firebase deploy --only firestore:rules,firestore:indexes
    ```
 6. Çalıştırın:
    ```
@@ -74,7 +76,7 @@ flutter test
 
 ```
 lib/
-  core/        tema, müfredat verisi, servisler (auth, bulut, bildirim, takvim, fotoğraf), ortak widget'lar
+  core/        tema, müfredat verisi, servisler (auth, bulut, bildirim, takvim), ortak widget'lar
   models/      konu, oturum, deneme, not, ajanda, profil
   providers/   AppProvider: tek merkezi durum + yerel kayıt + bulut senkronizasyonu
   features/    dashboard, pomodoro, curriculum, exams, notes, agenda, onboarding, profile, home

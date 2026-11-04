@@ -1,0 +1,107 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "id",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "title",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "content",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "isChecklist",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "checklist",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "colorIndex",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "isPinned",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "status",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "trashedAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "lessonName",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "topicId",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "sortKey",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "createdAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "updatedAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "imagePaths",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "localImagePath",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "isCritical",
+      "ttl": false,
+      "indexes": []
+    }
+  ]
+}

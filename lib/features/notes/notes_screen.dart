@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/lesson_style.dart';
-import '../../core/services/image_store.dart';
 import '../../core/widgets/decor.dart';
 import '../../models/note_model.dart';
 import '../../providers/app_provider.dart';
@@ -13,7 +12,7 @@ import 'note_board.dart';
 import 'note_editor_page.dart';
 
 /// Quick filters above the notes.
-enum _Filter { all, checklists, photos }
+enum _Filter { all, checklists }
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -73,7 +72,6 @@ class _NotesScreenState extends State<NotesScreen> {
         switch (_filter) {
           _Filter.all => true,
           _Filter.checklists => n.isChecklist,
-          _Filter.photos => n.imagePaths.isNotEmpty,
         };
   }
 
@@ -89,13 +87,13 @@ class _NotesScreenState extends State<NotesScreen> {
     final filtering = _search.text.isNotEmpty || _filter != _Filter.all || _lesson != null;
 
     Widget board(List<NoteModel> list) => NoteBoard(
-          notes: list,
-          grid: _grid,
-          onOpen: (n) => _open(note: n),
-          onMove: (dragged, target) => p.moveNote(dragged, target),
-          onDragUpdate: _onDragUpdate,
-          onDragEnd: _onDragEnd,
-        );
+      notes: list,
+      grid: _grid,
+      onOpen: (n) => _open(note: n),
+      onMove: (dragged, target) => p.moveNote(dragged, target),
+      onDragUpdate: _onDragUpdate,
+      onDragEnd: _onDragEnd,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -111,10 +109,8 @@ class _NotesScreenState extends State<NotesScreen> {
           ),
           PopupMenuButton<NoteStatus>(
             tooltip: 'Diğer',
-            onSelected: (s) => Navigator.push(
-              context,
-              MaterialPageRoute<void>(builder: (_) => NoteCollectionPage(status: s)),
-            ),
+            onSelected: (s) =>
+                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => NoteCollectionPage(status: s))),
             itemBuilder: (_) => [
               PopupMenuItem(
                 value: NoteStatus.archived,
@@ -134,108 +130,115 @@ class _NotesScreenState extends State<NotesScreen> {
           ),
         ],
       ),
-      floatingActionButton: _NewNoteButton(onPressed: () => _open()),
-      body: ListView(
-        controller: _scroll,
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
+      // The capture card is the single way to add a note; it stays pinned on
+      // top so it is always one tap away, however far the list is scrolled.
+      body: Column(
         children: [
-          _QuickCapture(
-            onText: () => _open(),
-            onChecklist: () => _open(start: NoteStart.checklist),
-            onCamera: ImageStore.isSupported ? () => _open(start: NoteStart.camera) : null,
-            onGallery: ImageStore.isSupported ? () => _open(start: NoteStart.gallery) : null,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            child: _QuickCapture(
+              onText: () => _open(),
+              onChecklist: () => _open(start: NoteStart.checklist),
+            ),
           ),
-          const SizedBox(height: 12),
-          if (all.isNotEmpty) ...[
-            TextField(
-              controller: _search,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                hintText: 'Notlarda ara',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: _search.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Temizle',
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: () => setState(_search.clear),
-                      ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final (f, label, icon) in [
-                    (_Filter.all, 'Tümü', Icons.notes_rounded),
-                    (_Filter.checklists, 'Yapılacaklar', Icons.checklist_rounded),
-                    (_Filter.photos, 'Fotoğraflı', Icons.photo_outlined),
-                  ])
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        showCheckmark: false,
-                        avatar: Icon(icon, size: 18),
-                        label: Text(label),
-                        selected: _filter == f && (f != _Filter.all || _lesson == null),
-                        onSelected: (_) => setState(() {
-                          _filter = f;
-                          if (f == _Filter.all) _lesson = null;
-                        }),
-                      ),
+          Expanded(
+            child: ListView(
+              controller: _scroll,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+              children: [
+                if (all.isNotEmpty) ...[
+                  TextField(
+                    controller: _search,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Notlarda ara',
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon: _search.text.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'Temizle',
+                              icon: const Icon(Icons.close_rounded),
+                              onPressed: () => setState(_search.clear),
+                            ),
                     ),
-                  for (final l in lessons)
+                  ),
+                  const SizedBox(height: 10),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final (f, label, icon) in [
+                          (_Filter.all, 'Tümü', Icons.notes_rounded),
+                          (_Filter.checklists, 'Yapılacaklar', Icons.checklist_rounded),
+                              ])
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              showCheckmark: false,
+                              avatar: Icon(icon, size: 18),
+                              label: Text(label),
+                              selected: _filter == f && (f != _Filter.all || _lesson == null),
+                              onSelected: (_) => setState(() {
+                                _filter = f;
+                                if (f == _Filter.all) _lesson = null;
+                              }),
+                            ),
+                          ),
+                        for (final l in lessons)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: FilterChip(
+                              showCheckmark: false,
+                              avatar: Icon(LessonStyle.of(l).icon, size: 18, color: LessonStyle.of(l).color),
+                              label: Text(l),
+                              selected: _lesson == l,
+                              onSelected: (v) => setState(() => _lesson = v ? l : null),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                ],
+                if (all.isEmpty)
+                  const EmptyStateCard(
+                    icon: Icons.sticky_note_2_rounded,
+                    title: 'İlk notunu al',
+                    message:
+                        'Yukarıdaki karta dokunup aklına geleni hemen yaz ya da yapılacaklar listesi tut. '
+                        'Notların otomatik kaydedilir; renklendir, sabitle, sürükleyip istediğin gibi sırala.',
+                  )
+                else if (notes.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 48),
+                    child: Column(
+                      children: [
+                        Icon(Icons.search_off_rounded, size: 44, color: theme.colorScheme.outline),
+                        const SizedBox(height: 8),
+                        Text('Bu aramaya uyan not yok.', style: TextStyle(color: theme.colorScheme.outline)),
+                      ],
+                    ),
+                  )
+                else ...[
+                  if (pinned.isNotEmpty) ...[
+                    _Header(icon: Icons.push_pin_rounded, text: 'Sabitlenenler'),
+                    board(pinned),
+                    if (others.isNotEmpty) _Header(icon: Icons.notes_rounded, text: 'Diğer notlar'),
+                  ],
+                  if (others.isNotEmpty) board(others),
+                  if (!filtering && all.length > 1)
                     Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        showCheckmark: false,
-                        avatar: Icon(LessonStyle.of(l).icon, size: 18, color: LessonStyle.of(l).color),
-                        label: Text(l),
-                        selected: _lesson == l,
-                        onSelected: (v) => setState(() => _lesson = v ? l : null),
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        'İpucu: Bir notu basılı tutup başka bir notun üzerine bırakarak sıralayabilirsin.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
                       ),
                     ),
                 ],
-              ),
+              ],
             ),
-            const SizedBox(height: 6),
-          ],
-          if (all.isEmpty)
-            const EmptyStateCard(
-              icon: Icons.sticky_note_2_rounded,
-              title: 'İlk notunu al',
-              message: 'Aklına geleni hemen yaz, yapılacaklar listesi tut, defterinin fotoğrafını çek. '
-                  'Notların otomatik kaydedilir; renklendir, sabitle, sürükleyip istediğin gibi sırala.',
-            )
-          else if (notes.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 48),
-              child: Column(
-                children: [
-                  Icon(Icons.search_off_rounded, size: 44, color: theme.colorScheme.outline),
-                  const SizedBox(height: 8),
-                  Text('Bu aramaya uyan not yok.', style: TextStyle(color: theme.colorScheme.outline)),
-                ],
-              ),
-            )
-          else ...[
-            if (pinned.isNotEmpty) ...[
-              _Header(icon: Icons.push_pin_rounded, text: 'Sabitlenenler'),
-              board(pinned),
-              if (others.isNotEmpty) _Header(icon: Icons.notes_rounded, text: 'Diğer notlar'),
-            ],
-            if (others.isNotEmpty) board(others),
-            if (!filtering && all.length > 1)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  'İpucu: Bir notu basılı tutup başka bir notun üzerine bırakarak sıralayabilirsin.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
-                ),
-              ),
-          ],
+          ),
         ],
       ),
     );
@@ -253,12 +256,14 @@ void showNoteExitSnack(BuildContext context, NoteEditorResult r) {
   };
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(
-      content: Text(text),
-      action: r.exit == NoteEditorExit.discarded
-          ? null
-          : SnackBarAction(label: 'Geri al', onPressed: () => app.setNoteStatus(r.id, r.from)),
-    ));
+    ..showSnackBar(
+      SnackBar(
+        content: Text(text),
+        action: r.exit == NoteEditorExit.discarded
+            ? null
+            : SnackBarAction(label: 'Geri al', onPressed: () => app.setNoteStatus(r.id, r.from)),
+      ),
+    );
 }
 
 class _Header extends StatelessWidget {
@@ -276,50 +281,71 @@ class _Header extends StatelessWidget {
         children: [
           Icon(icon, size: 16, color: outline),
           const SizedBox(width: 6),
-          Text(text.toUpperCase(),
-              style: TextStyle(fontSize: 12, letterSpacing: 1.1, fontWeight: FontWeight.w800, color: outline)),
+          Text(
+            text.toUpperCase(),
+            style: TextStyle(fontSize: 12, letterSpacing: 1.1, fontWeight: FontWeight.w800, color: outline),
+          ),
         ],
       ),
     );
   }
 }
 
-/// "Take a note…" bar: one tap to start writing, a list or a photo note.
+/// The single "take a note" entry point: tap to write, or start a list
+/// straight away. Uses the brand gradient so it stands out.
 class _QuickCapture extends StatelessWidget {
-  const _QuickCapture({required this.onText, required this.onChecklist, this.onCamera, this.onGallery});
+  const _QuickCapture({required this.onText, required this.onChecklist});
 
   final VoidCallback onText;
   final VoidCallback onChecklist;
-  final VoidCallback? onCamera;
-  final VoidCallback? onGallery;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SoftShadow(
+    final radius = BorderRadius.circular(AppTheme.radius + 4);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: AppTheme.brandGradient,
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF6C4CF1).withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 6)),
+        ],
+      ),
       child: Material(
-        color: theme.cardTheme.color ?? theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radius),
+        color: Colors.transparent,
+        borderRadius: radius,
         child: InkWell(
-          borderRadius: BorderRadius.circular(AppTheme.radius),
+          borderRadius: radius,
           onTap: onText,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 6, 6, 6),
+            padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
             child: Row(
               children: [
-                ShaderMask(
-                  shaderCallback: (r) => AppTheme.brandGradient.createShader(r),
-                  child: const Icon(Icons.edit_note_rounded, color: Colors.white, size: 28),
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.22), shape: BoxShape.circle),
+                  child: const Icon(Icons.edit_rounded, color: Colors.white),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text('Bir not al…', style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.outline)),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Bir not al…',
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Hemen yaz ya da liste yap',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                    ],
+                  ),
                 ),
-                IconButton(tooltip: 'Yeni liste', icon: const Icon(Icons.checklist_rounded), onPressed: onChecklist),
-                if (onCamera != null)
-                  IconButton(tooltip: 'Fotoğraflı not', icon: const Icon(Icons.photo_camera_outlined), onPressed: onCamera),
-                if (onGallery != null)
-                  IconButton(tooltip: 'Galeriden not', icon: const Icon(Icons.image_outlined), onPressed: onGallery),
+                _CaptureAction(tooltip: 'Yeni liste', icon: Icons.checklist_rounded, onTap: onChecklist),
               ],
             ),
           ),
@@ -329,38 +355,28 @@ class _QuickCapture extends StatelessWidget {
   }
 }
 
-class _NewNoteButton extends StatelessWidget {
-  const _NewNoteButton({required this.onPressed});
+class _CaptureAction extends StatelessWidget {
+  const _CaptureAction({required this.tooltip, required this.icon, required this.onTap});
 
-  final VoidCallback onPressed;
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Not ekle',
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: AppTheme.brandGradient,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(color: const Color(0xFF6C4CF1).withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 6)),
-          ],
-        ),
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Tooltip(
+        message: tooltip,
         child: Material(
-          color: Colors.transparent,
+          color: Colors.white.withValues(alpha: 0.18),
+          shape: const CircleBorder(),
           child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: onPressed,
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.add_rounded, color: Colors.white),
-                  SizedBox(width: 6),
-                  Text('Yeni not', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
-                ],
-              ),
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(9),
+              child: Icon(icon, color: Colors.white, size: 21),
             ),
           ),
         ),
@@ -407,7 +423,7 @@ class NoteCollectionPage extends StatelessWidget {
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Çöp kutusu boşaltılsın mı?'),
-        content: const Text('Buradaki tüm notlar ve fotoğrafları kalıcı olarak silinecek.'),
+        content: const Text('Buradaki tüm notlar kalıcı olarak silinecek.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Vazgeç')),
           FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Boşalt')),
@@ -427,8 +443,7 @@ class NoteCollectionPage extends StatelessWidget {
       appBar: AppBar(
         title: Text(trash ? 'Çöp Kutusu' : 'Arşiv'),
         actions: [
-          if (trash && notes.isNotEmpty)
-            TextButton(onPressed: () => _empty(context), child: const Text('Boşalt')),
+          if (trash && notes.isNotEmpty) TextButton(onPressed: () => _empty(context), child: const Text('Boşalt')),
         ],
       ),
       body: ListView(
