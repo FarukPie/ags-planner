@@ -36,8 +36,8 @@ class _PomodoroScreenState extends State<PomodoroScreen> with WidgetsBindingObse
 
   NotificationService? _notifications;
 
-  /// False when Android won't let the end alarm wake the screen.
-  bool _canWakeScreen = true;
+  /// Set when Android won't let the end alarm wake the screen.
+  WakeBlocker? _wakeBlocker;
 
   @override
   void initState() {
@@ -56,8 +56,8 @@ class _PomodoroScreenState extends State<PomodoroScreen> with WidgetsBindingObse
   }
 
   Future<void> _checkWakeScreen() async {
-    final ok = await _notifications?.canWakeScreen() ?? true;
-    if (mounted && ok != _canWakeScreen) setState(() => _canWakeScreen = ok);
+    final blocker = await _notifications?.wakeBlocker();
+    if (mounted && blocker != _wakeBlocker) setState(() => _wakeBlocker = blocker);
   }
 
   /// Mirrors the timer to the system: a live countdown in the status bar and
@@ -73,21 +73,17 @@ class _PomodoroScreenState extends State<PomodoroScreen> with WidgetsBindingObse
     final title = !isPomodoro ? 'Kronometre ⏱️' : (isRest ? 'Mola ☕' : 'Odaklan 🎯');
     final subject = isRest ? 'Mola zamanı' : (_lessonName == null ? '' : _subject);
 
+    final value = isPomodoro ? _timer.remaining : _timer.elapsed;
+
     if (_timer.isRunning) {
-      final now = DateTime.now();
-      if (isPomodoro) {
-        n.schedulePomodoroEnd(_timer.remaining, isRest: isRest);
-        n.showRunningTimer(title: title, subject: subject, countDownTo: now.add(_timer.remaining));
-      } else {
-        n.showRunningTimer(title: title, subject: subject, countUpFrom: now.subtract(_timer.elapsed));
-      }
+      if (isPomodoro) n.schedulePomodoroEnd(_timer.remaining, isRest: isRest);
+      n.showTimer(title: title, subject: subject, value: value, countDown: isPomodoro, running: true);
       return;
     }
     // A natural finish keeps the (possibly already shown) end alarm.
     if (!_timer.isFinishingNaturally) n.cancelPomodoro();
     if (_timer.hasProgress) {
-      final left = isPomodoro ? '${_clock(_timer.remaining)} kaldı' : _clock(_timer.elapsed);
-      n.showPausedTimer(title: '$title • Duraklatıldı', subject: subject.isEmpty ? left : '$subject • $left');
+      n.showTimer(title: '$title • Duraklatıldı', subject: subject, value: value, countDown: isPomodoro, running: false);
     } else {
       n.cancelTimer();
     }
@@ -195,10 +191,13 @@ class _PomodoroScreenState extends State<PomodoroScreen> with WidgetsBindingObse
                 onSelectionChanged: locked ? null : (s) => _timer.setMode(s.first),
               ),
             ),
-            if (!_canWakeScreen && _timer.mode == StudyMode.pomodoro)
+            if (_wakeBlocker case final blocker? when _timer.mode == StudyMode.pomodoro)
               Padding(
                 padding: const EdgeInsets.only(top: 16),
-                child: _WakeScreenBanner(onAllow: () => _notifications?.requestWakeScreen()),
+                child: _WakeScreenBanner(
+                  blocker: blocker,
+                  onAllow: () => _notifications?.requestWakeScreen(blocker),
+                ),
               ),
             const SizedBox(height: 24),
             _TimerDial(timer: _timer, subject: _lessonName == null ? null : _subject),
@@ -299,8 +298,9 @@ class _PomodoroScreenState extends State<PomodoroScreen> with WidgetsBindingObse
 
 /// Explains why the screen stays dark at the end and opens the right setting.
 class _WakeScreenBanner extends StatelessWidget {
-  const _WakeScreenBanner({required this.onAllow});
+  const _WakeScreenBanner({required this.blocker, required this.onAllow});
 
+  final WakeBlocker blocker;
   final VoidCallback onAllow;
 
   @override
@@ -317,7 +317,12 @@ class _WakeScreenBanner extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Süre dolduğunda ekranın açılması için tam ekran bildirim izni gerekli.',
+                switch (blocker) {
+                  WakeBlocker.fullScreenIntent =>
+                    'Süre dolduğunda ekranın açılması için tam ekran bildirim izni gerekli.',
+                  WakeBlocker.xiaomi => 'Süre dolduğunda kilit ekranında uyarı çıkması için '
+                      '"Kilit ekranında göster" ve "Arka planda çalışırken yeni pencere aç" izinlerini aç.',
+                },
                 style: TextStyle(color: scheme.onTertiaryContainer),
               ),
             ),

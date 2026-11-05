@@ -40,6 +40,8 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     const white = Colors.white;
+    // Also busy while an account picked from the startup sheet signs in.
+    final busy = _busy || context.watch<AuthService>().isSigningIn;
 
     Widget feature(IconData icon, String title, String text) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -154,8 +156,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 foregroundColor: const Color(0xFF1F1F1F),
                                 padding: const EdgeInsets.symmetric(vertical: 16),
                               ),
-                              onPressed: _busy ? null : _signIn,
-                              child: _busy
+                              onPressed: busy ? null : _signIn,
+                              child: busy
                                   ? const SizedBox.square(dimension: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
                                   : const Row(
                                       mainAxisAlignment: MainAxisAlignment.center,

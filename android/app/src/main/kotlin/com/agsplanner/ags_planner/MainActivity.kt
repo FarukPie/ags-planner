@@ -1,10 +1,15 @@
 package com.agsplanner.ags_planner
 
+import android.app.AppOpsManager
 import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
+import android.provider.Settings
+import android.util.Log
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -15,15 +20,21 @@ import io.flutter.plugin.common.MethodChannel
  * phone is locked, the activity is shown over the lock screen only for that
  * moment; Flutter then covers everything with a minimal "time's up" screen.
  * Confirming (or the screen turning off) puts the lock screen back on top.
+ *
+ * Also hosts the status-bar timer ([TimerNotification]) and reports what
+ * keeps the alarm from waking the screen.
  */
 class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
+    private var timerChannel: MethodChannel? = null
     private var pendingAlarm: String? = null
+    private var launchedFromTimer = false
     private var overLock = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "ags/lock_alarm").apply {
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
+        channel = MethodChannel(messenger, "ags/lock_alarm").apply {
             setMethodCallHandler { call, result ->
                 when (call.method) {
                     "takePending" -> {
@@ -34,11 +45,37 @@ class MainActivity : FlutterActivity() {
                         setOverLock(false)
                         result.success(null)
                     }
-                    // Android 14+ may deny full-screen intents; then the alarm can't wake the screen.
-                    "canUseFullScreenIntent" -> result.success(
-                        Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE ||
-                            getSystemService(NotificationManager::class.java)?.canUseFullScreenIntent() != false
-                    )
+                    "wakeBlocker" -> result.success(wakeBlocker())
+                    "openXiaomiPermissions" -> {
+                        openXiaomiPermissions()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
+        timerChannel = MethodChannel(messenger, "ags/timer_notification").apply {
+            setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "show" -> {
+                        TimerNotification.show(
+                            this@MainActivity,
+                            title = call.argument<String>("title") ?: "",
+                            subject = call.argument<String>("subject") ?: "",
+                            valueMs = call.argument<Number>("valueMs")?.toLong() ?: 0L,
+                            countDown = call.argument<Boolean>("countDown") ?: false,
+                            running = call.argument<Boolean>("running") ?: false,
+                        )
+                        result.success(null)
+                    }
+                    "cancel" -> {
+                        TimerNotification.cancel(this@MainActivity)
+                        result.success(null)
+                    }
+                    "takeLaunch" -> {
+                        result.success(launchedFromTimer)
+                        launchedFromTimer = false
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -47,12 +84,12 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        handleAlarm(intent)
+        handleIntent(intent, coldStart = true)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        handleAlarm(intent)
+        handleIntent(intent, coldStart = false)
     }
 
     override fun onStop() {
@@ -62,6 +99,15 @@ class MainActivity : FlutterActivity() {
             setOverLock(false)
             channel?.invokeMethod("hide", null)
         }
+    }
+
+    private fun handleIntent(intent: Intent?, coldStart: Boolean) {
+        if (intent?.action == TimerNotification.ACTION_OPEN) {
+            // Pulled by Dart on cold start; pushed when the engine is already running.
+            if (coldStart) launchedFromTimer = true else timerChannel?.invokeMethod("tap", null)
+            return
+        }
+        handleAlarm(intent)
     }
 
     private fun handleAlarm(intent: Intent?) {
@@ -74,6 +120,53 @@ class MainActivity : FlutterActivity() {
         channel?.invokeMethod("show", pendingAlarm)
     }
 
+    /**
+     * Why the end alarm can't wake the screen: "fullScreenIntent" (Android 14+
+     * permission), "xiaomi" (MIUI/HyperOS "show on lock screen" or "open new
+     * windows while running in the background" is off), or null.
+     */
+    private fun wakeBlocker(): String? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+            getSystemService(NotificationManager::class.java)?.canUseFullScreenIntent() == false
+        ) return "fullScreenIntent"
+        if (isXiaomi() && (miuiOpAllowed(OP_SHOW_WHEN_LOCKED) == false ||
+                miuiOpAllowed(OP_BACKGROUND_START_ACTIVITY) == false)
+        ) return "xiaomi"
+        return null
+    }
+
+    private fun isXiaomi() = Build.MANUFACTURER.equals("Xiaomi", ignoreCase = true)
+
+    /** MIUI keeps these permissions as private app-ops; null if unreadable. */
+    private fun miuiOpAllowed(op: Int): Boolean? = try {
+        val ops = getSystemService(AppOpsManager::class.java)
+        val check = AppOpsManager::class.java.getMethod(
+            "checkOpNoThrow", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, String::class.java,
+        )
+        check.invoke(ops, op, Process.myUid(), packageName) as Int == AppOpsManager.MODE_ALLOWED
+    } catch (e: Exception) {
+        Log.w("AgsLockAlarm", "MIUI permission $op unreadable", e)
+        null
+    }
+
+    /** MIUI's per-app "Other permissions" page, else the app's settings page. */
+    private fun openXiaomiPermissions() {
+        val miui = Intent("miui.intent.action.APP_PERM_EDITOR").putExtra("extra_pkgname", packageName)
+        val attempts = listOf(
+            Intent(miui).setClassName("com.miui.securitycenter", "com.miui.permcenter.permissions.PermissionsEditorActivity"),
+            Intent(miui).setClassName("com.miui.securitycenter", "com.miui.permcenter.permissions.AppPermissionsEditorActivity"),
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
+        )
+        for (intent in attempts) {
+            try {
+                startActivity(intent)
+                return
+            } catch (e: Exception) {
+                Log.w("AgsLockAlarm", "Cannot open ${intent.component ?: intent.action}", e)
+            }
+        }
+    }
+
     private fun setOverLock(on: Boolean) {
         overLock = on
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -84,5 +177,11 @@ class MainActivity : FlutterActivity() {
             val flags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
             if (on) window.addFlags(flags) else window.clearFlags(flags)
         }
+    }
+
+    private companion object {
+        // MIUI-specific app-op codes.
+        const val OP_SHOW_WHEN_LOCKED = 10020
+        const val OP_BACKGROUND_START_ACTIVITY = 10021
     }
 }

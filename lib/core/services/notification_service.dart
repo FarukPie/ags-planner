@@ -4,6 +4,16 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
+/// What keeps the pomodoro end alarm from waking the screen (Android).
+enum WakeBlocker {
+  /// Android 14+ full-screen alarm permission is off.
+  fullScreenIntent,
+
+  /// Xiaomi (MIUI/HyperOS) "show on lock screen" or "open new windows while
+  /// running in the background" is off; these are off by default there.
+  xiaomi,
+}
+
 /// Local notifications: the live timer in the status bar, the pomodoro end
 /// alarm and the daily review reminder.
 ///
@@ -16,11 +26,11 @@ class NotificationService {
 
   static const _pomodoroId = 1;
   static const _reviewId = 2;
-  static const _timerId = 3;
   static const _pomodoroPayload = 'pomodoro';
   static const _workEndPayload = 'pomodoro:work';
   static const _restEndPayload = 'pomodoro:rest';
   static const _lockChannel = MethodChannel('ags/lock_alarm');
+  static const _timerNotification = MethodChannel('ags/timer_notification');
 
   /// Set while the end alarm is shown over the lock screen (Android):
   /// true = a work phase ended, false = a rest ended, null = not shown.
@@ -36,26 +46,31 @@ class NotificationService {
     }
   }
 
-  /// Whether the end alarm may wake the screen. Android 14+ can deny
-  /// full-screen intents; the alarm then only rings and vibrates.
-  Future<bool> canWakeScreen() async {
-    if (!_ready || defaultTargetPlatform != TargetPlatform.android) return true;
+  /// Why the end alarm can't wake the screen, or null when it can.
+  Future<WakeBlocker?> wakeBlocker() async {
+    if (!_ready || defaultTargetPlatform != TargetPlatform.android) return null;
     try {
-      return await _lockChannel.invokeMethod<bool>('canUseFullScreenIntent') ?? true;
+      final name = await _lockChannel.invokeMethod<String>('wakeBlocker');
+      return WakeBlocker.values.where((b) => b.name == name).firstOrNull;
     } catch (e) {
-      debugPrint('Full-screen intent check failed: $e');
-      return true;
+      debugPrint('Wake-screen check failed: $e');
+      return null;
     }
   }
 
-  /// Opens the system page where the user allows full-screen alarms.
-  Future<void> requestWakeScreen() async {
+  /// Opens the system page where the user lifts [blocker].
+  Future<void> requestWakeScreen(WakeBlocker blocker) async {
     try {
-      await _plugin
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestFullScreenIntentPermission();
+      switch (blocker) {
+        case WakeBlocker.fullScreenIntent:
+          await _plugin
+              .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+              ?.requestFullScreenIntentPermission();
+        case WakeBlocker.xiaomi:
+          await _lockChannel.invokeMethod<void>('openXiaomiPermissions');
+      }
     } catch (e) {
-      debugPrint('Full-screen intent request failed: $e');
+      debugPrint('Wake-screen request failed: $e');
     }
   }
 
@@ -122,10 +137,6 @@ class NotificationService {
     iOS: const DarwinNotificationDetails(interruptionLevel: InterruptionLevel.timeSensitive),
   );
 
-  static const _timerChannel = 'pomodoro_timer';
-  static const _timerChannelName = 'Çalışan Sayaç';
-  static const _timerChannelDesc = 'Pomodoro ve kronometre süresini bildirim çubuğunda gösterir';
-
   Future<void> init() async {
     if (kIsWeb) return;
     try {
@@ -150,8 +161,9 @@ class NotificationService {
           launch.didNotificationLaunchApp &&
           (launch.notificationResponse?.payload?.startsWith(_pomodoroPayload) ?? false);
       await _initLockAlarm();
+      await _initTimerTaps();
       // A fresh start has no running timer, so a leftover status-bar timer is stale.
-      await _plugin.cancel(id: _timerId);
+      await cancelTimer();
       // Not awaited: the system dialog must not block the first frame.
       _plugin
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
@@ -194,62 +206,49 @@ class NotificationService {
 
   Future<void> cancelPomodoro() => _cancel(_pomodoroId);
 
-  /// Shows the timer in the status bar. The system itself renders the
-  /// ticking clock, so it keeps counting while the app is in the background.
-  /// Pass [countDownTo] for pomodoro phases, [countUpFrom] for the stopwatch.
-  Future<void> showRunningTimer({
+  /// Shows the timer in the status bar, a large clock on the left. The
+  /// system renders the ticking clock, so it keeps counting while the app is
+  /// in the background. [value] is the time left ([countDown], pomodoro) or
+  /// elapsed (stopwatch); a paused timer ([running] false) shows it frozen.
+  /// Android only (iOS has no live status-bar timer).
+  Future<void> showTimer({
     required String title,
     required String subject,
-    DateTime? countDownTo,
-    DateTime? countUpFrom,
-  }) {
-    final down = countDownTo != null;
-    final when = (countDownTo ?? countUpFrom ?? DateTime.now()).millisecondsSinceEpoch;
-    final left = when - DateTime.now().millisecondsSinceEpoch;
-    return _show(
-      title,
-      subject,
-      AndroidNotificationDetails(
-        _timerChannel,
-        _timerChannelName,
-        channelDescription: _timerChannelDesc,
-        importance: Importance.low,
-        priority: Priority.low,
-        playSound: false,
-        enableVibration: false,
-        onlyAlertOnce: true,
-        ongoing: true,
-        autoCancel: false,
-        when: when,
-        usesChronometer: true,
-        chronometerCountDown: down,
-        // Disappear at zero; the end alarm takes over from there.
-        timeoutAfter: down ? (left < 1 ? 1 : left) : null,
-        category: AndroidNotificationCategory.stopwatch,
-        visibility: NotificationVisibility.public,
-      ),
-    );
+    required Duration value,
+    required bool countDown,
+    required bool running,
+  }) =>
+      _timerCall('show', {
+        'title': title,
+        'subject': subject,
+        'valueMs': value.inMilliseconds,
+        'countDown': countDown,
+        'running': running,
+      });
+
+  Future<void> cancelTimer() => _timerCall('cancel');
+
+  Future<void> _timerCall(String method, [Map<String, Object>? args]) async {
+    if (!_ready || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      await _timerNotification.invokeMethod<void>(method, args);
+    } catch (e) {
+      debugPrint('Timer notification $method failed: $e');
+    }
   }
 
-  /// Static, dismissible status-bar entry for a paused timer.
-  Future<void> showPausedTimer({required String title, required String subject}) => _show(
-        title,
-        subject,
-        const AndroidNotificationDetails(
-          _timerChannel,
-          _timerChannelName,
-          channelDescription: _timerChannelDesc,
-          importance: Importance.low,
-          priority: Priority.low,
-          playSound: false,
-          enableVibration: false,
-          onlyAlertOnce: true,
-          showWhen: false,
-          visibility: NotificationVisibility.public,
-        ),
-      );
-
-  Future<void> cancelTimer() => _cancel(_timerId);
+  /// Taps on the status-bar timer open the pomodoro tab, like the alarm's.
+  Future<void> _initTimerTaps() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    _timerNotification.setMethodCallHandler((call) async {
+      if (call.method == 'tap') pomodoroTaps.value++;
+    });
+    try {
+      if (await _timerNotification.invokeMethod<bool>('takeLaunch') ?? false) _launchedFromPomodoro = true;
+    } catch (e) {
+      debugPrint('Timer notification unavailable: $e');
+    }
+  }
 
   /// Schedules (or, when [count] is 0, cancels) the review reminder.
   Future<void> scheduleReviewReminder(DateTime at, int count) => count == 0
@@ -260,22 +259,6 @@ class NotificationService {
           'Bugün $count tekrarın var',
           '7. ve 30. gün tekrarlarını yaparak bilgini kalıcı hale getir.',
         );
-
-  /// Timer entries are Android-only (iOS has no live status-bar timer).
-  Future<void> _show(String title, String body, AndroidNotificationDetails android) async {
-    if (!_ready || defaultTargetPlatform != TargetPlatform.android) return;
-    try {
-      await _plugin.show(
-        id: _timerId,
-        title: title,
-        body: body,
-        notificationDetails: NotificationDetails(android: android),
-        payload: _pomodoroPayload,
-      );
-    } catch (e) {
-      debugPrint('Notification show failed: $e');
-    }
-  }
 
   Future<void> _schedule(
     int id,

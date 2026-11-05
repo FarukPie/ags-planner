@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart';
 import 'package:http/http.dart' as http;
@@ -21,14 +22,21 @@ class CalendarService {
       _withApi((api) => api.events.delete('primary', eventId));
 
   Future<T> _withApi<T>(Future<T> Function(CalendarApi api) run) async {
-    final headers = await GoogleSignIn.instance.authorizationClient
-        .authorizationHeaders(scopes, promptIfNecessary: true);
-    if (headers == null) {
-      throw StateError('Google Takvim izni verilmedi.');
+    Map<String, String>? headers;
+    try {
+      headers = await GoogleSignIn.instance.authorizationClient
+          .authorizationHeaders(scopes, promptIfNecessary: true);
+    } on GoogleSignInException catch (e) {
+      debugPrint('Calendar authorization failed: ${e.code} ${e.description}');
+      throw const CalendarAccessDenied();
     }
+    if (headers == null) throw const CalendarAccessDenied();
     final client = _HeaderClient(headers);
     try {
       return await run(CalendarApi(client));
+    } on DetailedApiRequestError catch (e) {
+      if (e.status == 401 || e.status == 403) throw const CalendarAccessDenied();
+      rethrow;
     } finally {
       client.close();
     }
@@ -63,6 +71,15 @@ class CalendarService {
     if (h == null || m == null) return null;
     return DateTime(day.year, day.month, day.day, h, m);
   }
+}
+
+/// The user (or Google, for an account the app isn't cleared for yet)
+/// refused Calendar access.
+class CalendarAccessDenied implements Exception {
+  const CalendarAccessDenied();
+
+  @override
+  String toString() => 'Google Takvim izni verilmedi. Takvim erişimine izin verip tekrar dene.';
 }
 
 class _HeaderClient extends http.BaseClient {
