@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Status-bar timer: a large ticking clock on the left, title and subject on the right. -->
+<!-- Status-bar timer (collapsed): a large ticking clock on the left, title and subject on the right.
+     The clock is sized in dp: the collapsed row has a fixed height, so it must not grow with font scale. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -11,8 +12,9 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textAppearance="@android:style/TextAppearance.Material.Notification.Title"
-        android:textSize="30sp"
+        android:textSize="40dp"
         android:textStyle="bold"
+        android:includeFontPadding="false"
         android:fontFeatureSettings="tnum"
         android:singleLine="true" />
 

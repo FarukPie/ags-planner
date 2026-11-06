@@ -12,6 +12,10 @@ enum WakeBlocker {
   /// Xiaomi (MIUI/HyperOS) "show on lock screen" or "open new windows while
   /// running in the background" is off; these are off by default there.
   xiaomi,
+
+  /// Same Xiaomi permissions, but this MIUI/HyperOS version doesn't let the
+  /// app read them, so the user is asked until they confirm turning them on.
+  xiaomiUnverified,
 }
 
 /// Local notifications: the live timer in the status bar, the pomodoro end
@@ -66,11 +70,21 @@ class NotificationService {
           await _plugin
               .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
               ?.requestFullScreenIntentPermission();
-        case WakeBlocker.xiaomi:
+        case WakeBlocker.xiaomi || WakeBlocker.xiaomiUnverified:
           await _lockChannel.invokeMethod<void>('openXiaomiPermissions');
       }
     } catch (e) {
       debugPrint('Wake-screen request failed: $e');
+    }
+  }
+
+  /// Records that the user turned on the Xiaomi permissions the app can't read
+  /// ([WakeBlocker.xiaomiUnverified]), so they aren't asked again.
+  Future<void> confirmXiaomiPermissions() async {
+    try {
+      await _lockChannel.invokeMethod<void>('confirmXiaomiPermissions');
+    } catch (e) {
+      debugPrint('Xiaomi permission confirm failed: $e');
     }
   }
 

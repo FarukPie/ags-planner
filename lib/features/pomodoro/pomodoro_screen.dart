@@ -197,6 +197,10 @@ class _PomodoroScreenState extends State<PomodoroScreen> with WidgetsBindingObse
                 child: _WakeScreenBanner(
                   blocker: blocker,
                   onAllow: () => _notifications?.requestWakeScreen(blocker),
+                  onConfirm: () async {
+                    await _notifications?.confirmXiaomiPermissions();
+                    await _checkWakeScreen();
+                  },
                 ),
               ),
             const SizedBox(height: 24),
@@ -298,10 +302,13 @@ class _PomodoroScreenState extends State<PomodoroScreen> with WidgetsBindingObse
 
 /// Explains why the screen stays dark at the end and opens the right setting.
 class _WakeScreenBanner extends StatelessWidget {
-  const _WakeScreenBanner({required this.blocker, required this.onAllow});
+  const _WakeScreenBanner({required this.blocker, required this.onAllow, required this.onConfirm});
 
   final WakeBlocker blocker;
   final VoidCallback onAllow;
+
+  /// For [WakeBlocker.xiaomiUnverified]: the user says the permissions are on.
+  final VoidCallback onConfirm;
 
   @override
   Widget build(BuildContext context) {
@@ -311,22 +318,35 @@ class _WakeScreenBanner extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Icon(Icons.screen_lock_portrait_rounded, color: scheme.onTertiaryContainer),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                switch (blocker) {
-                  WakeBlocker.fullScreenIntent =>
-                    'Süre dolduğunda ekranın açılması için tam ekran bildirim izni gerekli.',
-                  WakeBlocker.xiaomi => 'Süre dolduğunda kilit ekranında uyarı çıkması için '
-                      '"Kilit ekranında göster" ve "Arka planda çalışırken yeni pencere aç" izinlerini aç.',
-                },
-                style: TextStyle(color: scheme.onTertiaryContainer),
-              ),
+            Row(
+              children: [
+                Icon(Icons.screen_lock_portrait_rounded, color: scheme.onTertiaryContainer),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    switch (blocker) {
+                      WakeBlocker.fullScreenIntent =>
+                        'Süre dolduğunda ekranın açılması için tam ekran bildirim izni gerekli.',
+                      WakeBlocker.xiaomi || WakeBlocker.xiaomiUnverified =>
+                        'Süre dolduğunda kilit ekranında uyarı çıkması için "Diğer izinler" sayfasında '
+                            '"Kilit ekranında göster" ve "Arka planda çalışırken yeni pencere aç" izinlerini aç.',
+                    },
+                    style: TextStyle(color: scheme.onTertiaryContainer),
+                  ),
+                ),
+              ],
             ),
-            TextButton(onPressed: onAllow, child: const Text('İzin ver')),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (blocker == WakeBlocker.xiaomiUnverified)
+                  TextButton(onPressed: onConfirm, child: const Text('Açtım')),
+                TextButton(onPressed: onAllow, child: const Text('İzin ver')),
+              ],
+            ),
           ],
         ),
       ),

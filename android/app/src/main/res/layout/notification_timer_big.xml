@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status-bar timer (expanded): title and subject above a very large ticking clock. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingBottom="8dp">
+
+    <TextView
+        android:id="@+id/timer_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification.Title" />
+
+    <TextView
+        android:id="@+id/timer_subject"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification" />
+
+    <Chronometer
+        android:id="@+id/timer_clock"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:gravity="center"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification.Title"
+        android:textSize="64dp"
+        android:textStyle="bold"
+        android:includeFontPadding="false"
+        android:fontFeatureSettings="tnum"
+        android:singleLine="true" />
+</LinearLayout>

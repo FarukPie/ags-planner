@@ -14,8 +14,9 @@ import android.widget.RemoteViews
 /**
  * The pomodoro/stopwatch entry in the status bar. The system renders the
  * ticking [android.widget.Chronometer], so it keeps counting while the app
- * is in the background. Drawn with a custom layout so the clock is large and
- * on the left, which the notifications plugin can't do.
+ * is in the background. Drawn with custom layouts so the clock is large (on
+ * the left when collapsed, full width when expanded), which the notifications
+ * plugin can't do.
  */
 object TimerNotification {
     const val ID = 3
@@ -36,7 +37,8 @@ object TimerNotification {
     ) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         val now = SystemClock.elapsedRealtime()
-        val views = RemoteViews(context.packageName, R.layout.notification_timer).apply {
+        // Both layouts share view ids: a large clock collapsed, a very large one expanded.
+        fun views(layout: Int) = RemoteViews(context.packageName, layout).apply {
             setChronometer(R.id.timer_clock, if (countDown) now + valueMs else now - valueMs, null, running)
             setChronometerCountDown(R.id.timer_clock, countDown)
             setTextViewText(R.id.timer_title, title)
@@ -71,7 +73,8 @@ object TimerNotification {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(subject)
-            .setCustomContentView(views)
+            .setCustomContentView(views(R.layout.notification_timer))
+            .setCustomBigContentView(views(R.layout.notification_timer_big))
             .setStyle(Notification.DecoratedCustomViewStyle())
             .setContentIntent(open)
             .setOngoing(running)

@@ -46,6 +46,10 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                     "wakeBlocker" -> result.success(wakeBlocker())
+                    "confirmXiaomiPermissions" -> {
+                        prefs().edit().putBoolean(KEY_XIAOMI_CONFIRMED, true).apply()
+                        result.success(null)
+                    }
                     "openXiaomiPermissions" -> {
                         openXiaomiPermissions()
                         result.success(null)
@@ -123,27 +127,44 @@ class MainActivity : FlutterActivity() {
     /**
      * Why the end alarm can't wake the screen: "fullScreenIntent" (Android 14+
      * permission), "xiaomi" (MIUI/HyperOS "show on lock screen" or "open new
-     * windows while running in the background" is off), or null.
+     * windows while running in the background" is off), "xiaomiUnverified"
+     * (those can't be read on this MIUI/HyperOS version and the user hasn't
+     * confirmed turning them on), or null.
      */
     private fun wakeBlocker(): String? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
             getSystemService(NotificationManager::class.java)?.canUseFullScreenIntent() == false
         ) return "fullScreenIntent"
-        if (isXiaomi() && (miuiOpAllowed(OP_SHOW_WHEN_LOCKED) == false ||
-                miuiOpAllowed(OP_BACKGROUND_START_ACTIVITY) == false)
-        ) return "xiaomi"
-        return null
+        if (!isXiaomi()) return null
+        val ops = listOf(miuiOpAllowed(OP_SHOW_WHEN_LOCKED), miuiOpAllowed(OP_BACKGROUND_START_ACTIVITY))
+        return when {
+            false in ops -> "xiaomi"
+            null in ops && !prefs().getBoolean(KEY_XIAOMI_CONFIRMED, false) -> "xiaomiUnverified"
+            else -> null
+        }
     }
 
-    private fun isXiaomi() = Build.MANUFACTURER.equals("Xiaomi", ignoreCase = true)
+    /** Xiaomi, Redmi and POCO phones all run MIUI/HyperOS. */
+    private fun isXiaomi() = listOf(Build.MANUFACTURER, Build.BRAND).any {
+        it.lowercase() in setOf("xiaomi", "redmi", "poco")
+    }
 
-    /** MIUI keeps these permissions as private app-ops; null if unreadable. */
+    private fun prefs() = getSharedPreferences("ags_lock_alarm", MODE_PRIVATE)
+
+    /**
+     * MIUI keeps these permissions as private app-ops: allowed, denied
+     * (ignored/errored), or null when unreadable on this system version.
+     */
     private fun miuiOpAllowed(op: Int): Boolean? = try {
         val ops = getSystemService(AppOpsManager::class.java)
         val check = AppOpsManager::class.java.getMethod(
             "checkOpNoThrow", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, String::class.java,
         )
-        check.invoke(ops, op, Process.myUid(), packageName) as Int == AppOpsManager.MODE_ALLOWED
+        when (check.invoke(ops, op, Process.myUid(), packageName) as Int) {
+            AppOpsManager.MODE_ALLOWED -> true
+            AppOpsManager.MODE_IGNORED, AppOpsManager.MODE_ERRORED -> false
+            else -> null
+        }
     } catch (e: Exception) {
         Log.w("AgsLockAlarm", "MIUI permission $op unreadable", e)
         null
@@ -183,5 +204,6 @@ class MainActivity : FlutterActivity() {
         // MIUI-specific app-op codes.
         const val OP_SHOW_WHEN_LOCKED = 10020
         const val OP_BACKGROUND_START_ACTIVITY = 10021
+        const val KEY_XIAOMI_CONFIRMED = "xiaomi_permissions_confirmed"
     }
 }
